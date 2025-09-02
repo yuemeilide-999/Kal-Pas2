@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<!--
+CAPACITOR + SQLITE + FILESYSTEM INSTRUCTIONS
+(Paste this block inside <head> of Kal-hp.html)
+
+1) Di folder project Anda (terminal):
+   npm install @capacitor/core @capacitor/cli
+   npm install @capacitor-community/sqlite
+   npm install @capacitor/filesystem
+
+2) Tambah platform & sinkronisasi:
+   npx cap add android    # (jika perlu)
+   npx cap add ios        # (opsional)
+   npx cap sync
+
+3) Buka native project di Android Studio/Xcode:
+   npx cap open android
+   npx cap open ios
+
+4) Android permissions:
+   - Untuk menulis ke Download/External, Anda mungkin perlu menambahkan permission di AndroidManifest (teknis: WRITE_EXTERNAL_STORAGE / MANAGE_EXTERNAL_STORAGE pada Android versi tertentu).
+   - Alternatif: gunakan FileSystem plugin dan simpan ke directory app-specific (Documents) untuk mengurangi requirement.
+
+5) Testing:
+   - Jika belum native build: kode akan fallback ke localStorage (bisa di-test di browser).
+   - Setelah native build & cap sync, plugin SQLite & Filesystem akan tersedia di WebView.
+
+-->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalkulator & Laporan TBS/Brondolan</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; margin: 0; background-color: #f0f4f8; color: #1f2937; transition: background-color 0.3s, color 0.3s; }
+        body.dark-mode { background-color: #1f2937; color: #e5e7eb; }
+        .bg-gradient { background-image: linear-gradient(135deg, #4CAF50, #8BC34A); }
+        .bg-gradient.dark-mode { background-image: linear-gradient(135deg, #1f2937, #4b5563); }
+        header { padding: 1.5rem; text-align: center; font-weight: 700; color: white; position: relative; }
+        .container { max-width: 900px; margin: auto; padding: 1.5rem; }
+        .card { background-color: white; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 1.5rem; }
+        .dark-mode .card { background-color: #374151; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
+        .nav-container { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem; }
+        .nav-link { display: flex; flex-direction: column; align-items: center; text-decoration: none; color: #6b7280; padding: 0.75rem; transition: color 0.2s, transform 0.2s; font-size: 0.875rem; text-align: center; }
+        .nav-link.active { color: #10B981; font-weight: 600; }
+        .dark-mode .nav-link.active { color: #34D399; }
+        .nav-link:hover { color: #10B981; transform: translateY(-2px); }
+        .dark-mode .nav-link:hover { color: #34D399; }
+        .nav-icon { width: 1.5rem; height: 1.5rem; margin-bottom: 0.25rem; fill: currentColor; }
+        .nav-item-group { display: flex; align-items: center; }
+        .hidden { display: none; }
+        h1, h2 { font-weight: 700; margin-top: 0; }
+        h2 { font-size: 1.5rem; margin-bottom: 1rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+        input, button, select { width: 100%; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #d1d5db; box-sizing: border-box; margin-bottom: 1rem; background-color: #f9fafb; color: #1f2937; }
+        .dark-mode input, .dark-mode select { background-color: #4b5563; color: #e5e7eb; border-color: #6b7280; }
+        .btn-primary { background-color: #10B981; color: white; font-weight: 700; border: none; cursor: pointer; transition: background-color 0.2s, transform 0.2s; }
+        .btn-primary:hover { background-color: #059669; transform: translateY(-1px); }
+        .btn-secondary { background-color: #6b7280; color: white; border: none; }
+        .btn-danger { background-color: #EF4444; color: white; border: none; }
+        .btn-danger:hover { background-color: #DC2626; }
+        .btn-info { background-color: #3B82F6; color: white; border: none; }
+        .btn-info:hover { background-color: #2563EB; }
+        .btn-warning { background-color: #FBBF24; color: black; border: none; }
+        .btn-warning:hover { background-color: #F59E0B; }
+        .btn-action { background-color: transparent; border: none; cursor: pointer; padding: 0.5rem; transition: color 0.2s; }
+        .btn-action:hover { color: #10B981; }
+        .dark-mode .btn-action { color: #e5e7eb; }
+        .dark-mode .btn-action:hover { color: #34D399; }
+        .message-box { padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-weight: 600; text-align: center; }
+        .success { background-color: #D1FAE5; color: #065F46; }
+        .error { background-color: #FEE2E2; color: #991B1B; }
+        .dark-mode .success { background-color: #065F46; color: #D1FAE5; }
+        .dark-mode .error { background-color: #991B1B; color: #FEE2E2; }
+        pre { background-color: #f9fafb; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', monospace; font-size: 0.875rem; border: 1px solid #d1d5db; }
+        .dark-mode pre { background-color: #4b5563; border-color: #6b7280; }
+        .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 0.5rem; border: 1px solid #e5e7eb; }
+        .dark-mode .table-container { border-color: #4b5563; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+        th, td { padding: 0.75rem; text-align: left; border: 1px solid #e5e7eb; }
+        .dark-mode th, .dark-mode td { border-color: #4b5563; }
+        thead { background-color: #f9fafb; }
+        .dark-mode thead { background-color: #4b5563; }
+        th { font-weight: 700; }
+        .button-group { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+        .laporan-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid #e5e7eb; transition: background-color 0.2s; }
+        .dark-mode .laporan-item { border-color: #4b5563; }
+        .laporan-item:hover { background-color: #f3f4f6; }
+        .dark-mode .laporan-item:hover { background-color: #4b5563; }
+        .laporan-item:last-child { border-bottom: none; }
+        .nama-col { width: 30%; } /* Atur lebar kolom nama */
+        .no-col { width: 5%; } /* Atur lebar kolom no */
+        .brondolan-col { display: none; }
+        .gallery-actions { display: flex; gap: 0.5rem; justify-content: flex-start; }
+
+        /* Modal */
+        .modal { position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; }
+        .modal-content { background-color: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 8px 16px rgba(0,0,0,0.2); max-width: 90%; max-height: 90vh; overflow-y: auto; }
+        .dark-mode .modal-content { background-color: #374151; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #d1d5db; padding-bottom: 1rem; margin-bottom: 1rem; }
+        .dark-mode .modal-header { border-color: #6b7280; }
+        .modal-header h3 { margin: 0; }
+        .close-button { color: #aaa; font-size: 1.5rem; font-weight: bold; cursor: pointer; transition: color 0.2s; }
+        .close-button:hover { color: black; }
+        .dark-mode .close-button:hover { color: white; }
+        .modal-footer { margin-top: 1rem; text-align: right; }
+
+        /* Dark Mode Toggle */
+        .dark-mode-toggle { position: absolute; top: 1.5rem; right: 1.5rem; background: none; border: none; cursor: pointer; color: white; font-size: 1.5rem; }
+        .dark-mode-toggle:hover { transform: scale(1.1); }
+        .dark-mode-toggle svg { fill: currentColor; }
+        
+        /* Print Styles */
+        @media print {
+            body * { visibility: hidden; }
+            body, html {
+                margin: 0;
+                padding: 0;
+                background: #fff !important;
+                color: #000 !important;
+            }
+            .page {
+                position: static !important;
+                visibility: visible !important;
+                display: block !important;
+                page-break-after: always;
+                padding: 2cm;
+                box-shadow: none;
+                border: none;
+            }
+            .page .button-group { display: none; }
+            .page .table-container {
+                overflow: visible !important;
+                border: none !important;
+            }
+            .page table { width: 100%; }
+            .page th, .page td {
+                border: 1px solid black !important;
+            }
+            .page h2, .page p, .page h1, .page p span {
+                visibility: visible !important;
+                text-align: center;
+                margin-top: 0;
+            }
+            .page p { margin-bottom: 1rem; }
+            @page {
+                size: A4 portrait;
+                margin: 1cm;
+            }
+        }
+    </style>
+</head>
+<body>
+  <input type="file" id="importFile" accept=".json,application/json" style="display:none" />
+    <header class="bg-gradient">
+        <button id="darkModeToggle" class="dark-mode-toggle">
+            <svg id="sun-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="nav-icon">
+                <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.106a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.06l1.59-1.591zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5h2.25a.75.75 0 01.75.75zM12 18.75a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0v-2.25a.75.75 0 01.75-.75zM4.243 18.394a.75.75 0 001.06-1.06l-1.59-1.59a.75.75 0 10-1.06 1.06l1.59 1.59zM3 12a.75.75 0 01.75-.75h2.25a.75.75 0 010 1.5H3a.75.75 0 01-.75-.75zM6.106 18.894a.75.75 0 001.06-1.06l-1.59-1.59a.75.75 0 10-1.06 1.06l1.59 1.59z" />
+            </svg>
+            <svg id="moon-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="nav-icon hidden">
+                <path d="M9.598 2.05a.75.75 0 01.594.309l1.539 2.515c1.076.626 2.035 1.486 2.822 2.515.892 1.144 1.523 2.457 1.879 3.864a.75.75 0 01-.753.88l-1.462-.397a.75.75 0 00-.73.432 12.446 12.446 0 01-1.372 2.859c-.838 1.139-1.877 2.073-3.033 2.766a12.551 12.551 0 01-2.903 1.096c-1.157.25-2.348.374-3.538.374-.852 0-1.69-.064-2.505-.193a.75.75 0 01-.628-.654l-.071-.979a.75.75 0 01.765-.778 12.87 12.87 0 001.294.072 11.238 11.238 0 001.994-.188 10.375 10.375 0 002.583-.799c.928-.415 1.77-1.026 2.476-1.792a11.2 11.2 0 001.93-2.614c.725-1.12.957-2.355.836-3.582a13.921 13.921 0 00-.635-3.847l-1.085-.923a.75.75 0 01-.225-1.043l.812-1.293z" />
+            </svg>
+        </button>
+        <h1>Perkuah Ate Simbelin</h1>
+        <p>Aplikasi Kalkulator & Laporan TBS/Brondolan</p>
+    </header>
+
+    <div class="nav-container card">
+        <a onclick="showPage('kalTBS')" id="menu-kalTBS" class="nav-link active">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="nav-icon"><path d="M7.5 7.5a3 3 0 109 0 3 3 0 00-9 0z" /><path fill-rule="evenodd" d="M3 16.5h18v-4.75a.75.75 0 00-.75-.75H14.25a5.25 5.25 0 00-10.5 0H3a.75.75 0 00-.75.75V19.5a.75.75 0 00.75.75h7.5a.75.75 0 000-1.5H4.5v-2.25H3v-2.25zm13.5-4.75a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" clip-rule="evenodd" /></svg>
+            <span>Kal-TBS</span>
+        </a>
+        <a onclick="showPage('kalBrondol')" id="menu-kalBrondol" class="nav-link">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="nav-icon"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-2.625.75a.75.75 0 00-1.259.467l-1.75 6.75a.75.75 0 00-.113.342c-.052.176-.08.362-.08.552v.69c0 .19.028.376.08.552.016.056.035.112.057.167.03.07.067.135.109.196l1.75 6.75a.75.75 0 001.259.467 1.75 1.75 0 00.867-1.189l-.742-2.855c-.156-.606-.441-1.18-.854-1.696-.389-.47-.852-.862-1.371-1.161-.26-.15-.544-.265-.84-.337a.75.75 0 00-.63-.075l-1.673.491a.75.75 0 01-.617-.376.75.75 0 01.385-.92l2.311-.678c.84-.247 1.58-.692 2.2-1.312.56-.56 1.002-1.218 1.3-1.95.27-.67.4-1.393.374-2.127a.75.75 0 01.765-.733zm6.67 4.966l.764.557a.75.75 0 001.12-.916l-1.7-2.316a.75.75 0 00-1.121.916l.765.558a4.5 4.5 0 00-3.328 6.784l.765.558a.75.75 0 001.121-.916l-1.7-2.316a.75.75 0 00-1.12-.916l.764-.557a.75.75 0 00.177-1.196 6.002 6.002 0 014.288-9.043.75.75 0 00-.177-1.196l-1.7-2.316a.75.75 0 00-1.121.916l.765.558c-1.52.996-2.587 2.65-2.868 4.455a.75.75 0 01-.765.733l-2.07-.607a.75.75 0 00-.617.376.75.75 0 00.385.92l2.311.678c.84-.247 1.58-.692 2.2-1.312.56-.56 1.002-1.218 1.3-1.95.27-.67.4-1.393.374-2.127a.75.75 0 01-.765.733l-2.07-.607a.75.75 0 00-.617.376.75.75 0 00.385.92l2.311.678z" clip-rule="evenodd" /></svg>
+            <span>Kal-Brondolan</span>
+        </a>
+        <div class="nav-item-group">
+            <a onclick="showPage('laporan')" id="menu-laporan" class="nav-link">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="nav-icon"><path fill-rule="evenodd" d="M3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6zM15.546 8.446a.75.75 0 10-1.092 1.018 4.755 4.755 0 013.371 3.296.75.75 0 001.428-.423 6.255 6.255 0 00-4.007-4.225zM12 9a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0112 9zm-2.25 4.25a.75.75 0 00-1.5 0v2a.75.75 0 001.5 0v-2zM-3 2.5a.75.75 0 00-1.5 0v.5a.75.75 0 001.5 0v-.5z" clip-rule="evenodd" /></svg>
+                <span>Laporan</span>
+            </a>
+            <select id="report-type-select" onchange="renderLaporan()">
+                <option value="TBS">TBS</option>
+                <option value="Brondolan">Brondolan</option>
+            </select>
+        </div>
+        <a onclick="showPage('galeri')" id="menu-galeri" class="nav-link">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="nav-icon"><path fill-rule="evenodd" d="M1.5 6a3 3 0 013-3h15a3 3 0 013 3v12a3 3 0 01-3 3H4.5a3 3 0 01-3-3V6zM3 16.038l2.94-2.94a.75.75 0 011.06 0l4.5 4.5a.75.75 0 010 1.06l-2.94 2.94a.75.75 0 01-1.06 0L3 17.098a.75.75 0 010-1.06zM6 14.5a.5.5 0 100-1 .5.5 0 000 1z" clip-rule="evenodd" /><path d="M12.522 4.478a.75.75 0 01.706-.525h4.794a.75.75 0 01.525.706v4.794a.75.75 0 01-.525.706.75.75 0 01-.706-.525h-3.957l-4.148 4.148a.75.75 0 01-1.06-1.06L12.015 5.253z" /></svg>
+            <span>Galeri</span>
+        </a>
+        <a onclick="showPage('harga')" id="menu-harga" class="nav-link">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="nav-icon"><path fill-rule="evenodd" d="M1.5 5.625c0-1.036.84-1.875 1.875-1.875h17.25c1.035 0 1.875.84 1.875 1.875v12.75c0 1.035-.84 1.875-1.875 1.875H3.375A1.875 1.875 0 011.5 18.375V5.625zM20.25 7.5a.75.75 0 01-.75.75H18a2.25 2.25 0 01-2.25-2.25V4.5a.75.75 0 011.5 0v.75c0 .621.504 1.125 1.125 1.125h.75a.75.75 0 01.75.75zM12 11.25a.75.75 0 00-.75.75v3c0 .414.336.75.75.75h3.75a.75.75 0 000-1.5H12a.75.75 0 01-.75-.75v-1.5a.75.75 0 01.75-.75h1.5a.75.75 0 000-1.5H12zM15.75 4.5a.75.75 0 00-1.5 0v.75c0 .621.504 1.125 1.125 1.125h.75a.75.75 0 00.75-.75V4.5zM12 4.5a.75.75 0 00-.75.75v2.25a.75.75 0 001.5 0V5.25A.75.75 0 0012 4.5z" clip-rule="evenodd" /></svg>
+            <span>Harga</span>
+        </a>
+    </div>
+
+    <div class="container">
+        <div id="notification" class="message-box hidden"></div>
+
+        <!-- Kalkulator TBS -->
+        <div id="kalTBS" class="page card">
+            <h2>Kalkulator Timbangan TBS</h2>
+            <p><b>Harga Saat Ini:</b> Rp <span id="hargaInfoTBS"></span> /Kg</p>
+            <label for="tbs_nama">Nama:</label>
+            <input type="text" id="tbs_nama" placeholder="Masukkan nama (wajib)">
+            <label for="tbs_timbang1">Timbang Bruto (Kg):</label>
+            <input type="number" id="tbs_timbang1" placeholder="Berat kotor (wajib)">
+            <label for="tbs_timbang2">Timbang Tara (Kg):</label>
+            <input type="number" id="tbs_timbang2" placeholder="Berat wadah (wajib)">
+            <label for="tbs_air">Potongan Air (%):</label>
+            <input type="number" id="tbs_air" placeholder="Cth: 2">
+            <label for="tbs_sampah">Potongan Sampah (%):</label>
+            <input type="number" id="tbs_sampah" placeholder="Cth: 4">
+            <button class="btn-primary" onclick="hitungTotal('TBS')">HITUNG</button>
+            <pre id="tbs_hasil" class="hidden"></pre>
+            <button id="tbs_btnSimpan" class="btn-primary hidden" onclick="simpanLaporan('TBS')">Simpan ke Laporan</button>
+        </div>
+
+        <!-- Kalkulator Brondolan -->
+        <div id="kalBrondol" class="page card hidden">
+            <h2>Kalkulator Timbangan Brondolan</h2>
+            <p><b>Harga Saat Ini:</b> Rp <span id="hargaInfoBr"></span> /Kg</p>
+            <label for="br_timbang1">Timbang Bruto (Kg):</label>
+            <input type="number" id="br_timbang1" placeholder="Berat kotor (wajib)">
+            <label for="br_air">Potongan Air (%):</label>
+            <input type="number" id="br_air" placeholder="Cth: 2">
+            <label for="br_sampah">Potongan Sampah (%):</label>
+            <input type="number" id="br_sampah" placeholder="Cth: 4">
+            <button class="btn-primary" onclick="hitungTotal('Brondolan')">HITUNG</button>
+            <pre id="br_hasil" class="hidden"></pre>
+            <button id="br_btnSimpan" class="btn-primary hidden" onclick="simpanLaporan('Brondolan')">Simpan ke Laporan</button>
+        </div>
+
+        <!-- Laporan -->
+        <div id="laporan" class="page card hidden">
+            <h2 id="laporanJudul">Laporan Harian - TBS</h2>
+            <p>Periode: <span id="periode"></span></p>
+            <div id="tabelLaporanContainer" class="table-container">
+                <table id="tabelLaporan">
+                    <thead><tr><th class="no-col">NO</th><th id="namaHeader">NAMA</th><th>BERAT BERSIH</th><th>PEMBAYARAN</th></tr></thead><tbody></tbody>
+                </table>
+            </div>
+            <div class="button-group">
+                <button class="btn-info" onclick="exportToPDF()">Ekspor ke PDF</button>
+                <button class="btn-info" onclick="printReport()">Cetak Laporan</button>
+                <button class="btn-danger" onclick="clearDailyReports()">Bersihkan Laporan Harian</button>
+            </div>
+        </div>
+
+        <!-- Galeri -->
+        <div id="galeri" class="page card hidden">
+            <h2>Galeri Laporan (Permanen)</h2>
+            <p>Laporan yang sudah diekspor tersimpan di sini. Anda dapat mencetak ulang atau mengelola data.</p>
+            <div id="galleryContent" class="table-container">
+                <table id="galleryTable">
+                    <thead>
+                        <tr>
+                            <th class="no-col">NO</th>
+                            <th style="width: 40%;">Judul</th>
+                            <th style="width: 30%;">Tanggal</th>
+                            <th style="width: 25%;">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div id="importExport" class="button-group">
+                <button class="btn-info" onclick="exportDataToJson()">Ekspor Data JSON</button>
+                <input type="file" id="importFile" accept=".json" style="display: none;">
+                <button class="btn-info" onclick="triggerImport()">Impor Data JSON</button>
+            </div>
+        </div>
+
+        <!-- Pengaturan Harga -->
+        <div id="harga" class="page card hidden">
+            <h2>Pengaturan Harga</h2>
+            <label for="hargaTBS">Harga TBS (Rp/Kg):</label><input type="number" id="hargaTBS">
+            <label for="potonganTBS">Potongan Sampah TBS (%):</label><input type="number" id="potonganTBS">
+            <label for="hargaBr">Harga Brondolan (Rp/Kg):</label><input type="number" id="hargaBr">
+            <label for="potonganBr">Potongan Sampah Brondolan (%):</label><input type="number" id="potonganBr">
+            <label for="reportNote">Keterangan Laporan:</label>
+            <input type="text" id="reportNote" placeholder="Teks keterangan di laporan">
+            <button class="btn-primary" onclick="simpanHarga()">Simpan Pengaturan</button>
+        </div>
+    </div>
+
+    <!-- Modal untuk Edit Laporan -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Laporan</h3>
+                <span class="close-button" onclick="closeModal('editModal')">×</span>
+            </div>
+            <div id="edit-table-container"></div>
+            <div class="modal-footer">
+                <button class="btn-primary" onclick="saveChanges()">Simpan Perubahan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal untuk Konfirmasi -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Konfirmasi</h3>
+                <span class="close-button" onclick="closeModal('confirmModal')">×</span>
+            </div>
+            <p id="confirmMessage"></p>
+            <div class="button-group" style="justify-content: flex-end;">
+                <button class="btn-secondary" id="confirmNo">Tidak</button>
+                <button class="btn-danger" id="confirmYes">Ya</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+        // --- Global State ---
+        let laporanData = [];
+        let galeriLaporan = [];
+        let settings = {};
+        const NOTIFICATION_DURATION = 3000;
+        let lastHasil = null;
+
+        // --- Inisialisasi Aplikasi ---
+        document.addEventListener('DOMContentLoaded', async () => {
+          // 1. Inisialisasi SQLite (atau fallback ke localStorage)
+          await initSQLiteIfAvailable();
+
+          // 2. Load settings
+          settings = await loadSettingsFromStorage();
+          document.getElementById('hargaTBS').value = settings.hargaTBS || 1600;
+          document.getElementById('potonganTBS').value = settings.potonganTBS || 4;
+          document.getElementById('hargaBr').value = settings.hargaBr || 1600;
+          document.getElementById('potonganBr').value = settings.potonganBr || 4;
+          document.getElementById('reportNote').value = settings.reportNote || "Laporan ini dibuat secara otomatis oleh aplikasi";
+          updateInfoHarga();
+          updateInputDefaults();
+
+          // 3. Load laporan & galeri
+          laporanData = await loadReportsFromStorage();
+          galeriLaporan = await loadGalleryFromStorage();
+
+          // 4. Render UI awal
+          renderLaporan();
+          renderGaleriLaporan();
+          
+          // 5. Setup Listeners
+          setupListeners();
+          updateReportDate();
+          checkAppMode();
+        });
+
+        // --- UI & Navigasi ---
+        function showPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.add("hidden"));
+            document.getElementById(id).classList.remove("hidden");
+            document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+            document.getElementById(`menu-${id}`).classList.add('active');
+            updateInfoHarga();
+            if (id === 'laporan') {
+                renderLaporan();
+            }
+        }
+
+        function showNotification(message, type) {
+            const el = document.getElementById("notification");
+            el.textContent = message;
+            el.className = `message-box ${type}`;
+            el.classList.remove("hidden");
+            setTimeout(() => { el.classList.add("hidden"); }, NOTIFICATION_DURATION);
+        }
+
+        function updateInfoHarga() {
+            document.getElementById("hargaInfoTBS").textContent = parseFloat(document.getElementById("hargaTBS").value || 0).toLocaleString("id-ID");
+            document.getElementById("hargaInfoBr").textContent = parseFloat(document.getElementById("hargaBr").value || 0).toLocaleString("id-ID");
+        }
+        
+        function updateInputDefaults() {
+             // Set default values from settings
+            document.getElementById('tbs_sampah').value = settings.potonganTBS || 4;
+            document.getElementById('br_sampah').value = settings.potonganBr || 4;
+        }
+
+        function updateReportDate() {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            const tanggalHariIni = new Date().toLocaleDateString("id-ID", options);
+            document.getElementById("periode").textContent = tanggalHariIni;
+        }
+
+        function clearForm(jenis) {
+            if (jenis === 'TBS') {
+                document.getElementById('tbs_nama').value = '';
+                document.getElementById('tbs_timbang1').value = '';
+                document.getElementById('tbs_timbang2').value = '';
+                document.getElementById('tbs_air').value = '';
+                document.getElementById('tbs_sampah').value = settings.potonganTBS || 4;
+                document.getElementById('tbs_hasil').classList.add('hidden');
+                document.getElementById('tbs_btnSimpan').classList.add('hidden');
+            } else { // Brondolan
+                document.getElementById('br_timbang1').value = '';
+                document.getElementById('br_air').value = '';
+                document.getElementById('br_sampah').value = settings.potonganBr || 4;
+                document.getElementById('br_hasil').classList.add('hidden');
+                document.getElementById('br_btnSimpan').classList.add('hidden');
+            }
+        }
+        
+        // --- Fungsionalitas Kalkulator ---
+        function hitungTotal(jenis) {
+            let timbang1, air, sampah, nama = "", timbang2 = 0;
+            const tbsNameInput = document.getElementById("tbs_nama");
+            const tbsTimbang1Input = document.getElementById("tbs_timbang1");
+            const tbsTimbang2Input = document.getElementById("tbs_timbang2");
+            const brTimbang1Input = document.getElementById("br_timbang1");
+
+            // Validasi input
+            if (jenis === "TBS") {
+                if (!tbsTimbang1Input.value || !tbsTimbang2Input.value || !tbsNameInput.value) {
+                    showNotification("Silakan isi semua field wajib (Bruto, Tara, Nama).", "error");
+                    return;
+                }
+                nama = tbsNameInput.value.trim();
+                timbang1 = parseFloat(tbsTimbang1Input.value);
+                timbang2 = parseFloat(tbsTimbang2Input.value);
+                air = parseFloat(document.getElementById("tbs_air").value) || 0;
+                sampah = parseFloat(document.getElementById("tbs_sampah").value) || settings.potonganTBS || 4;
+            } else { // Brondolan
+                if (!brTimbang1Input.value) {
+                    showNotification("Silakan isi Timbang Bruto.", "error");
+                    return;
+                }
+                timbang1 = parseFloat(brTimbang1Input.value);
+                air = parseFloat(document.getElementById("br_air").value) || 0;
+                sampah = parseFloat(document.getElementById("br_sampah").value) || settings.potonganBr || 4;
+            }
+
+            if (isNaN(timbang1) || isNaN(timbang2) || isNaN(air) || isNaN(sampah)) {
+                showNotification("Input harus berupa angka yang valid.", "error");
+                return;
+            }
+
+            const jumlahKotor = jenis === "TBS" ? timbang1 - timbang2 : timbang1;
+            const potonganAir = jumlahKotor * (air / 100);
+            const potonganSampah = jumlahKotor * (sampah / 100);
+            const jumlahBersih = jumlahKotor - potonganAir - potonganSampah;
+            const harga = jenis === "TBS" ? (settings.hargaTBS || 1600) : (settings.hargaBr || 1600);
+            const pembayaran = jumlahBersih * harga;
+
+            const fmt = n => n.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+            const fmtDetail = n => n.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            const hasilTeks = `=========================================\n HASIL PERHITUNGAN TIMBANGAN\n=========================================\nJenis Buah : ${jenis}\n${jenis === "TBS" ? "Nama : " + nama + "\n" : ""}Timbang Bruto : ${fmt(timbang1)} Kg\n${jenis === "TBS" ? "Timbang Tara : " + fmt(timbang2) + " Kg\n" : ""}-----------------------------------------\nJumlah Kotor : ${fmt(jumlahKotor)} Kg\nPotongan Air (${air}%) : ${fmtDetail(potonganAir)} Kg\nPotongan Sampah (${sampah}%) : ${fmtDetail(potonganSampah)} Kg\n-----------------------------------------\nJumlah Bersih : ${fmt(jumlahBersih)} Kg\n-----------------------------------------\nHarga : Rp ${harga.toLocaleString("id-ID", { minimumFractionDigits: 0 })}/Kg\nPembayaran : Rp ${pembayaran.toLocaleString("id-ID", { minimumFractionDigits: 2 })}`.trim();
+
+            const hasilEl = document.getElementById(`${jenis === "TBS" ? "tbs" : "br"}_hasil`);
+            hasilEl.textContent = hasilTeks;
+            hasilEl.classList.remove("hidden");
+            document.getElementById(`${jenis === "TBS" ? "tbs" : "br"}_btnSimpan`).classList.remove("hidden");
+            lastHasil = { nama, timbangBersih: jumlahBersih, pembayaran, jenis };
+        }
+
+        // --- Fungsionalitas Laporan & Galeri ---
+        function renderLaporan() {
+            const jenisLaporan = document.getElementById("report-type-select").value;
+            document.getElementById("laporanJudul").textContent = `Laporan Harian - ${jenisLaporan}`;
+            const namaHeader = document.getElementById("namaHeader");
+            
+            // Tampilkan/sembunyikan kolom "NAMA"
+            if (jenisLaporan === "TBS") {
+                namaHeader.style.display = 'table-cell';
+            } else {
+                namaHeader.style.display = 'none';
+            }
+            
+            const laporanHarian = laporanData.filter(item => item.jenis === jenisLaporan);
+            const tbody = document.querySelector("#tabelLaporan tbody");
+            tbody.innerHTML = "";
+            let counter = 1;
+            laporanHarian.forEach((item) => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td class="no-col">${counter++}</td>
+                    <td class="nama-col" style="${jenisLaporan === 'Brondolan' ? 'display:none;' : ''}">${item.nama}</td>
+                    <td>${item.timbangBersih.toLocaleString("id-ID", { minimumFractionDigits: 2 })} Kg</td>
+                    <td>Rp ${item.pembayaran.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+                `;
+            });
+        }
+
+        async function simpanLaporan(jenis) {
+            if (!lastHasil || lastHasil.jenis !== jenis) {
+                showNotification("Silakan hitung terlebih dahulu.", "error");
+                return;
+            }
+
+            const laporanBaru = {
+                id: Date.now(),
+                tanggal: new Date().toLocaleDateString("id-ID"),
+                nama: jenis === 'TBS' ? lastHasil.nama : '-',
+                timbangBersih: lastHasil.timbangBersih,
+                pembayaran: lastHasil.pembayaran,
+                jenis: lastHasil.jenis
+            };
+
+            const ok = await saveReportToStorage(laporanBaru);
+            if(ok){
+                laporanData = await loadReportsFromStorage();
+                renderLaporan();
+                clearForm(jenis);
+                showNotification(`Laporan berhasil disimpan.`, "success");
+            } else {
+                showNotification(`Gagal menyimpan laporan.`, "error");
+            }
+        }
+        
+        async function clearDailyReports() {
+            showConfirm("Apakah Anda yakin ingin menghapus semua laporan harian?", async () => {
+                const ok = await clearReportsFromStorage();
+                if (ok) {
+                    laporanData = [];
+                    renderLaporan();
+                    showNotification("Semua laporan harian telah dihapus.", "success");
+                } else {
+                    showNotification("Gagal menghapus laporan.", "error");
+                }
+            });
+        }
+
+        function getPrintableContent(reportData) {
+            const isGalleryReport = reportData && reportData.judul;
+            const dataToPrint = isGalleryReport ? reportData.data : laporanData.filter(item => item.jenis === document.getElementById("report-type-select").value);
+            const jenisLaporan = isGalleryReport ? reportData.jenis : document.getElementById("report-type-select").value;
+
+            if (dataToPrint.length === 0) {
+                showNotification("Tidak ada laporan untuk diekspor/dicetak.", "error");
+                return null;
+            }
+            
+            const totalBeratBersih = dataToPrint.reduce((sum, item) => sum + item.timbangBersih, 0);
+            const totalPembayaran = dataToPrint.reduce((sum, item) => sum + item.pembayaran, 0);
+
+            const printContent = document.createElement('div');
+            printContent.style.fontFamily = 'Inter, sans-serif';
+            printContent.innerHTML = `
+                <h1 style="text-align: center; margin-bottom: 0;">Perkuah Ate Simbelin</h1>
+                <h2 style="text-align: center; margin-top: 0; margin-bottom: 0.5rem;">Laporan Harian - ${jenisLaporan}</h2>
+                <p style="text-align: center; margin-top: 0;">Periode: ${isGalleryReport ? reportData.tanggal : document.getElementById("periode").textContent}</p>
+                <br>
+                <style>
+                    table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+                    th, td { padding: 8px; text-align: left; border: 1px solid black; }
+                    thead { background-color: #f2f2f2; }
+                    th.no-col, td.no-col { width: 5%; }
+                    th.nama-col, td.nama-col { width: 30%; }
+                    tfoot { font-weight: bold; }
+                    tfoot td { border-top: 2px solid black; }
+                </style>
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="no-col">NO</th>
+                            <th class="nama-col" style="${jenisLaporan === 'Brondolan' ? 'display:none;' : ''}">NAMA</th>
+                            <th>BERAT BERSIH (Kg)</th>
+                            <th>PEMBAYARAN (Rp)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${dataToPrint.map((item, index) => `
+                            <tr>
+                                <td class="no-col">${index + 1}</td>
+                                <td class="nama-col" style="${jenisLaporan === 'Brondolan' ? 'display:none;' : ''}">${item.nama}</td>
+                                <td>${item.timbangBersih.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+                                <td>${item.pembayaran.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="${jenisLaporan === 'Brondolan' ? 2 : 3}">TOTAL</td>
+                            <td>${totalBeratBersih.toLocaleString("id-ID", { minimumFractionDigits: 2 })} Kg</td>
+                            <td>Rp ${totalPembayaran.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <p style="text-align: center; font-style: italic; margin-top: 2rem;">${settings.reportNote}</p>
+            `;
+            return printContent;
+        }
+
+        async function exportToPDF() {
+            const content = getPrintableContent();
+            if (!content) return;
+
+            const jenisLaporan = document.getElementById("report-type-select").value;
+            const fileName = `Laporan_${jenisLaporan}_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+            try {
+                const ok = await saveToGallery(jenisLaporan);
+                if (ok) {
+                    await html2pdf().set({
+                        margin: 10,
+                        filename: fileName,
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 2 },
+                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                    }).from(content).save();
+                    showNotification("Laporan berhasil diekspor sebagai PDF.", "success");
+                } else {
+                    showNotification("Gagal mengekspor laporan ke PDF.", "error");
+                }
+            } catch (e) {
+                console.error("Gagal mengekspor PDF:", e);
+                showNotification("Gagal mengekspor laporan ke PDF.", "error");
+            }
+        }
+
+        function printReport() {
+            const content = getPrintableContent();
+            if (!content) return;
+            
+            const printableWindow = window.open('', '_blank');
+            printableWindow.document.write('<html><head><title>Cetak Laporan</title>');
+            printableWindow.document.write('<style>@page { size: A4; margin: 1cm; } body { font-family: \'Inter\', sans-serif; } table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid black; padding: 8px; text-align: left; } h1, h2, p { text-align: center; } h1, h2 { margin-bottom: 0; } p { margin-top: 0; } tfoot { font-weight: bold; } tfoot td { border-top: 2px solid black; }</style>');
+            printableWindow.document.write('</head><body>');
+            printableWindow.document.write(content.innerHTML);
+            printableWindow.document.write('</body></html>');
+            printableWindow.document.close();
+            printableWindow.print();
+        }
+
+        function printGalleryReport(id) {
+            const report = galeriLaporan.find(r => r.id === id);
+            if (!report) {
+                showNotification("Laporan tidak ditemukan.", "error");
+                return;
+            }
+            const content = getPrintableContent(report);
+            if (!content) return;
+            
+            const printableWindow = window.open('', '_blank');
+            printableWindow.document.write('<html><head><title>Cetak Laporan</title>');
+            printableWindow.document.write('<style>@page { size: A4; margin: 1cm; } body { font-family: \'Inter\', sans-serif; } table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid black; padding: 8px; text-align: left; } h1, h2, p { text-align: center; } h1, h2 { margin-bottom: 0; } p { margin-top: 0; } tfoot { font-weight: bold; } tfoot td { border-top: 2px solid black; }</style>');
+            printableWindow.document.write('</head><body>');
+            printableWindow.document.write(content.innerHTML);
+            printableWindow.document.write('</body></html>');
+            printableWindow.document.close();
+            printableWindow.print();
+        }
+
+        async function saveToGallery(jenis) {
+            const dataToSave = laporanData.filter(i => i.jenis === jenis);
+            if (dataToSave.length === 0) { return false; }
+            const entry = { id: Date.now(), judul: `Laporan ${jenis} - ${new Date().toLocaleDateString('id-ID')}`, tanggal: new Date().toLocaleDateString('id-ID'), jenis: jenis, data: dataToSave };
+            const ok = await saveGalleryToStorage(entry);
+            if(ok){
+                galeriLaporan = await loadGalleryFromStorage();
+                renderGaleriLaporan();
+                return true;
+            }
+            return false;
+        }
+
+        function renderGaleriLaporan() {
+            const tbody = document.querySelector("#galleryTable tbody");
+            tbody.innerHTML = "";
+            galeriLaporan.forEach((item, index) => {
+                const row = tbody.insertRow();
+                const totalBerat = item.data.reduce((sum, entry) => sum + entry.timbangBersih, 0);
+                const totalPembayaran = item.data.reduce((sum, entry) => sum + entry.pembayaran, 0);
+                row.innerHTML = `
+                    <td class="no-col">${index + 1}</td>
+                    <td>
+                        <span style="font-weight: bold; display: block;">${item.judul}</span>
+                        <small>Total: ${totalBerat.toLocaleString("id-ID", { minimumFractionDigits: 2 })} Kg / Rp ${totalPembayaran.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</small>
+                    </td>
+                    <td>${item.tanggal}</td>
+                    <td>
+                        <div class="gallery-actions">
+                            <button class="btn-action" onclick="showGalleryReport(${item.id})">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="nav-icon" style="width:1.25rem;">
+                                    <path fill-rule="evenodd" d="M3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6zm14.25-1.5H6.75A1.5 1.5 0 005.25 6v12A1.5 1.5 0 006.75 19.5h10.5A1.5 1.5 0 0018.75 18V6a1.5 1.5 0 00-1.5-1.5z" clip-rule="evenodd" />
+                                    <path d="M12 9.75a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5a.75.75 0 01.75-.75z" />
+                                </svg>
+                            </button>
+                            <button class="btn-action" onclick="deleteFromGallery(${item.id})">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="nav-icon" style="width:1.25rem;">
+                                    <path fill-rule="evenodd" d="M16.5 4.478a.75.75 0 01.972.247l.135.297a.75.75 0 01-.247.972l-1.92 1.92a.75.75 0 01-1.06 0l-2.25-2.25a.75.75 0 011.06-1.06l2.25 2.25a.75.75 0 010 1.06l-1.92 1.92a.75.75 0 01-.972.247L6 14.25a.75.75 0 01-.247-.972L7.92 11.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 01-1.06 1.06L9 12.06l-1.92 1.92a.75.75 0 01-.972.247L6 14.25a.75.75 0 01-.247-.972L7.92 11.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 01-1.06 1.06z" clip-rule="evenodd" />
+                                    <path d="M12 1.5a.75.75 0 01.75.75V3a.75.75 0 01-1.5 0V2.25a.75.75 0 01.75-.75z" />
+                                </svg>
+                            </button>
+                            <button class="btn-action" onclick="printGalleryReport(${item.id})">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="nav-icon" style="width:1.25rem;">
+                                    <path fill-rule="evenodd" d="M6 3a3 3 0 00-3 3v12a3 3 0 003 3h12a3 3 0 003-3V6a3 3 0 00-3-3H6zm.75 3.75a.75.75 0 00-1.5 0v1.5a.75.75 0 001.5 0v-1.5zM15 9a.75.75 0 00-1.5 0v4.5a.75.75 0 001.5 0V9zM7.5 9a.75.75 0 00-1.5 0v4.5a.75.75 0 001.5 0V9zM9 9a.75.75 0 00-1.5 0v4.5a.75.75 0 001.5 0V9zM10.5 9a.75.75 0 00-1.5 0v4.5a.75.75 0 001.5 0V9zM12 9a.75.75 0 00-1.5 0v4.5a.75.75 0 001.5 0V9zM13.5 9a.75.75 0 00-1.5 0v4.5a.75.75 0 001.5 0V9zM16.5 9a.75.75 0 00-1.5 0v4.5a.75.75 0 001.5 0V9z" clip-rule="evenodd" />
+                                    <path d="M4.5 9A1.5 1.5 0 016 7.5h1.5a.75.75 0 010 1.5H6a.75.75 0 00-.75.75V15a.75.75 0 00.75.75h9a.75.75 0 00.75-.75v-1.5a.75.75 0 011.5 0v1.5a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 15V9.75A2.25 2.25 0 016 7.5h1.5A.75.75 0 016 9H4.5zM12 1.5a.75.75 0 01.75.75V3a.75.75 0 01-1.5 0V2.25a.75.75 0 01.75-.75z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </td>
+                `;
+            });
+        }
+
+        function showGalleryReport(id) {
+            const report = galeriLaporan.find(r => r.id === id);
+            if (!report) return;
+
+            const modal = document.getElementById("editModal");
+            const modalTableContainer = document.getElementById("edit-table-container");
+            modalTableContainer.innerHTML = "";
+
+            const table = document.createElement("table");
+            table.classList.add("modal-table");
+            const thead = table.createTHead();
+            const headerRow = thead.insertRow();
+            headerRow.innerHTML = "<th>NO</th><th>TANGGAL</th><th class='nama-col' id='modalNamaHeader'>NAMA</th><th>BERAT BERSIH (Kg)</th><th>PEMBAYARAN (Rp)</th>";
+
+            if (report.jenis === 'Brondolan') {
+                headerRow.querySelector('#modalNamaHeader').style.display = 'none';
+            }
+
+            const tbody = table.createTBody();
+            let counter = 1;
+            report.data.forEach(item => {
+                const row = tbody.insertRow();
+                const namaCell = report.jenis === 'Brondolan' ? `<td style="display:none;">-</td>` : `<td class="nama-col">${item.nama}</td>`;
+                row.innerHTML = `
+                    <td>${counter++}</td>
+                    <td>${item.tanggal}</td>
+                    ${namaCell}
+                    <td>${item.timbangBersih.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+                    <td>${item.pembayaran.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+                `;
+            });
+
+            modalTableContainer.appendChild(table);
+            document.getElementById('editModal').querySelector('h3').textContent = report.judul;
+            modal.style.display = "flex";
+        }
+
+        function deleteFromGallery(id) {
+            showConfirm("Apakah Anda yakin ingin menghapus laporan ini?", async () => {
+                 const ok = await deleteFromGallery_viaSqlite(id);
+                 if (ok) {
+                    galeriLaporan = await loadGalleryFromStorage();
+                    renderGaleriLaporan();
+                    showNotification("Laporan berhasil dihapus dari galeri.", "success");
+                 } else {
+                    showNotification("Gagal menghapus laporan.", "error");
+                 }
+            });
+        }
+
+        // --- Fungsionalitas Pengaturan ---
+        function simpanHarga() {
+            settings = {
+                hargaTBS: parseFloat(document.getElementById("hargaTBS").value),
+                potonganTBS: parseFloat(document.getElementById("potonganTBS").value),
+                hargaBr: parseFloat(document.getElementById("hargaBr").value),
+                potonganBr: parseFloat(document.getElementById("potonganBr").value),
+                reportNote: document.getElementById("reportNote").value
+            };
+            saveSettingsToStorage(settings);
+            updateInfoHarga();
+            updateInputDefaults();
+            showNotification("Pengaturan harga berhasil disimpan.", "success");
+        }
+
+        // --- Modals ---
+        function closeModal(id) {
+            document.getElementById(id).style.display = "none";
+        }
+
+        function showConfirm(message, callback) {
+            const confirmModal = document.getElementById('confirmModal');
+            const confirmMessage = document.getElementById('confirmMessage');
+            const confirmYes = document.getElementById('confirmYes');
+            const confirmNo = document.getElementById('confirmNo');
+
+            confirmMessage.textContent = message;
+            confirmModal.style.display = 'flex';
+
+            const onYesClick = () => {
+                callback();
+                confirmModal.style.display = 'none';
+                confirmYes.removeEventListener('click', onYesClick);
+                confirmNo.removeEventListener('click', onNoClick);
+            };
+
+            const onNoClick = () => {
+                confirmModal.style.display = 'none';
+                confirmYes.removeEventListener('click', onYesClick);
+                confirmNo.removeEventListener('click', onNoClick);
+            };
+            
+            confirmYes.addEventListener('click', onYesClick);
+            confirmNo.addEventListener('click', onNoClick);
+        }
+        
+        function setupListeners() {
+            document.getElementById('report-type-select').addEventListener('change', () => {
+                renderLaporan();
+                showPage('laporan');
+            });
+
+             document.getElementById('darkModeToggle').addEventListener('click', () => {
+                document.body.classList.toggle('dark-mode');
+                document.querySelector('header').classList.toggle('dark-mode');
+                document.querySelector('.card').classList.toggle('dark-mode');
+                document.getElementById('sun-icon').classList.toggle('hidden');
+                document.getElementById('moon-icon').classList.toggle('hidden');
+            });
+        }
+
+        function checkAppMode() {
+            if (localStorage.getItem('theme') === 'dark') {
+                document.body.classList.add('dark-mode');
+                document.querySelector('header').classList.add('dark-mode');
+                document.getElementById('sun-icon').classList.add('hidden');
+                document.getElementById('moon-icon').classList.remove('hidden');
+            } else {
+                document.body.classList.remove('dark-mode');
+                document.querySelector('header').classList.remove('dark-mode');
+                document.getElementById('sun-icon').classList.remove('hidden');
+                document.getElementById('moon-icon').classList.add('hidden');
+            }
+        }
+        
+        // --- Eksperimental: SQLite & Import/Export ---
+        let sqlitePlugin = null;
+        let sqliteInitialized = false;
+        const TABLE_LAPORAN = 'laporan';
+        const TABLE_GALERI = 'galeri';
+        const TABLE_SETTINGS = 'settings';
+
+        async function initSQLiteIfAvailable() {
+            if (!window.Capacitor || !window.Capacitor.isNative || !window.sqlitePlugin) {
+                console.warn("SQLite plugin tidak tersedia. Menggunakan localStorage sebagai fallback.");
+                return;
+            }
+
+            try {
+                sqlitePlugin = window.sqlitePlugin;
+                const db = await sqlitePlugin.openDatabase({ name: 'myapp.db', location: 'default' });
+                await db.transaction(tx => {
+                    tx.executeSql(`CREATE TABLE IF NOT EXISTS ${TABLE_LAPORAN} (id INTEGER PRIMARY KEY, tanggal TEXT, nama TEXT, timbangBersih REAL, pembayaran REAL, jenis TEXT);`);
+                    tx.executeSql(`CREATE TABLE IF NOT EXISTS ${TABLE_GALERI} (id INTEGER PRIMARY KEY, judul TEXT, tanggal TEXT, jenis TEXT, data TEXT);`);
+                    tx.executeSql(`CREATE TABLE IF NOT EXISTS ${TABLE_SETTINGS} (id INTEGER PRIMARY KEY, key TEXT, value TEXT);`);
+                });
+                sqliteInitialized = true;
+                console.log("SQLite berhasil diinisialisasi.");
+            } catch (e) {
+                console.error("Gagal inisialisasi SQLite:", e);
+                sqliteInitialized = false;
+            }
+        }
+
+        async function saveReportToStorage(report) {
+            if (isNativeCapacitor() && sqliteInitialized) {
+                try {
+                    const db = await sqlitePlugin.openDatabase({ name: 'myapp.db', location: 'default' });
+                    await db.run({
+                        statement: `INSERT INTO ${TABLE_LAPORAN} (tanggal, nama, timbangBersih, pembayaran, jenis) VALUES (?, ?, ?, ?, ?);`,
+                        values: [report.tanggal, report.nama, report.timbangBersih, report.pembayaran, report.jenis]
+                    });
+                    return true;
+                } catch (e) {
+                    console.error("Gagal simpan ke SQLite:", e);
+                    return false;
+                }
+            } else {
+                let existingReports = JSON.parse(localStorage.getItem('laporanData') || '[]');
+                existingReports.push(report);
+                localStorage.setItem('laporanData', JSON.stringify(existingReports));
+                return true;
+            }
+        }
+        
+        async function loadReportsFromStorage() {
+            if (isNativeCapacitor() && sqliteInitialized) {
+                try {
+                    const db = await sqlitePlugin.openDatabase({ name: 'myapp.db', location: 'default' });
+                    const result = await db.query({ statement: `SELECT * FROM ${TABLE_LAPORAN};` });
+                    return result.rows.map(row => ({
+                        id: row.id,
+                        tanggal: row.tanggal,
+                        nama: row.nama,
+                        timbangBersih: row.timbangBersih,
+                        pembayaran: row.pembayaran,
+                        jenis: row.jenis
+                    }));
+                } catch (e) {
+                    console.error("Gagal memuat dari SQLite:", e);
+                    return JSON.parse(localStorage.getItem('laporanData') || '[]');
+                }
+            } else {
+                return JSON.parse(localStorage.getItem('laporanData') || '[]');
+            }
+        }
+
+        async function clearReportsFromStorage() {
+            if (isNativeCapacitor() && sqliteInitialized) {
+                 try {
+                     const db = await sqlitePlugin.openDatabase({ name: 'myapp.db', location: 'default' });
+                     await db.run({ statement: `DELETE FROM ${TABLE_LAPORAN};` });
+                     return true;
+                 } catch (e) {
+                     console.error("Gagal hapus dari SQLite:", e);
+                     return false;
+                 }
+            } else {
+                localStorage.removeItem('laporanData');
+                return true;
+            }
+        }
+
+        async function saveSettingsToStorage(settings) {
+            const data = JSON.stringify(settings);
+             if (isNativeCapacitor() && sqliteInitialized) {
+                 try {
+                     const db = await sqlitePlugin.openDatabase({ name: 'myapp.db', location: 'default' });
+                     await db.run({ statement: `DELETE FROM ${TABLE_SETTINGS};` });
+                     await db.run({ statement: `INSERT INTO ${TABLE_SETTINGS} (key, value) VALUES (?, ?);`, values: ['app_settings', data] });
+                     return true;
+                 } catch (e) {
+                     console.error("Gagal simpan pengaturan ke SQLite:", e);
+                     return false;
+                 }
+            } else {
+                localStorage.setItem('appSettings', data);
+                return true;
+            }
+        }
+
+        async function loadSettingsFromStorage() {
+            if (isNativeCapacitor() && sqliteInitialized) {
+                try {
+                    const db = await sqlitePlugin.openDatabase({ name: 'myapp.db', location: 'default' });
+                    const result = await db.query({ statement: `SELECT value FROM ${TABLE_SETTINGS} WHERE key = 'app_settings';` });
+                    if (result.rows.length > 0) {
+                        return JSON.parse(result.rows[0].value);
+                    }
+                } catch (e) {
+                    console.error("Gagal muat pengaturan dari SQLite:", e);
+                }
+            }
+            return JSON.parse(localStorage.getItem('appSettings') || '{}');
+        }
+        
+        async function exportDataToJson() {
+            const allData = {
+                laporanData: laporanData,
+                galeriLaporan: galeriLaporan,
+                settings: settings
+            };
+            const dataStr = JSON.stringify(allData, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `data_laporan_${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            showNotification("Data berhasil diekspor.", "success");
+        }
+        
+        function triggerImport() {
+            document.getElementById('importFile').click();
+        }
+
+        document.getElementById('importFile').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) { return; }
+            const reader = new FileReader();
+            reader.onload = async function(event) {
+                try {
+                    const importedData = JSON.parse(event.target.result);
+                    if (importedData.laporanData && importedData.galeriLaporan && importedData.settings) {
+                        await importData(importedData);
+                        showNotification("Data berhasil diimpor!", "success");
+                    } else {
+                        showNotification("File JSON tidak valid.", "error");
+                    }
+                } catch (error) {
+                    showNotification("Gagal memuat file JSON.", "error");
+                }
+            };
+            reader.readAsText(file);
+        });
+        
+        async function importData(importedData) {
+            // Hapus data yang ada
+            await clearReportsFromStorage();
+            await clearGalleryFromStorage();
+
+            // Masukkan data baru
+            for(const report of importedData.laporanData){
+                await saveReportToStorage(report);
+            }
+            for(const galleryItem of importedData.galeriLaporan){
+                await saveGalleryToStorage(galleryItem);
+            }
+            await saveSettingsToStorage(importedData.settings);
+
+            // Perbarui state & UI
+            laporanData = await loadReportsFromStorage();
+            galeriLaporan = await loadGalleryFromStorage();
+            settings = await loadSettingsFromStorage();
+            
+            renderLaporan();
+            renderGaleriLaporan();
+            updateInfoHarga();
+            checkAppMode();
+        }
+
+        function isNativeCapacitor() {
+            return window.Capacitor && window.Capacitor.isNative;
+        }
+
+        async function saveGalleryToStorage(entry) {
+            if (isNativeCapacitor() && sqliteInitialized) {
+                 try {
+                     const db = await sqlitePlugin.openDatabase({ name: 'myapp.db', location: 'default' });
+                     await db.run({ statement: `INSERT INTO ${TABLE_GALERI} (judul, tanggal, jenis, data) VALUES (?, ?, ?, ?);`, values: [entry.judul, entry.tanggal, entry.jenis, JSON.stringify(entry.data)] });
+                     return true;
+                 } catch (e) {
+                     console.error("Gagal simpan galeri ke SQLite:", e);
+                     return false;
+                 }
+            } else {
+                const existingGallery = JSON.parse(localStorage.getItem('galeriLaporan') || '[]');
+                entry.id = Date.now();
+                existingGallery.push(entry);
+                localStorage.setItem('galeriLaporan', JSON.stringify(existingGallery));
+                return true;
+            }
+        }
+        
+        async function loadGalleryFromStorage() {
+             if (isNativeCapacitor() && sqliteInitialized) {
+                try {
+                    const db = await sqlitePlugin.openDatabase({ name: 'myapp.db', location: 'default' });
+                    const result = await db.query({ statement: `SELECT * FROM ${TABLE_GALERI};` });
+                    return result.rows.map(row => ({
+                        id: row.id,
+                        judul: row.judul,
+                        tanggal: row.tanggal,
+                        jenis: row.jenis,
+                        data: JSON.parse(row.data)
+                    }));
+                } catch (e) {
+                    console.error("Gagal muat galeri dari SQLite:", e);
+                    return JSON.parse(localStorage.getItem('galeriLaporan') || '[]');
+                }
+            } else {
+                return JSON.parse(localStorage.getItem('galeriLaporan') || '[]');
+            }
+        }
+
+        async function clearGalleryFromStorage() {
+            if (isNativeCapacitor() && sqliteInitialized) {
+                 try {
+                     const db = await sqlitePlugin.openDatabase({ name: 'myapp.db', location: 'default' });
+                     await db.run({ statement: `DELETE FROM ${TABLE_GALERI};` });
+                     return true;
+                 } catch (e) {
+                     console.error("Gagal hapus galeri dari SQLite:", e);
+                     return false;
+                 }
+            } else {
+                localStorage.removeItem('galeriLaporan');
+                return true;
+            }
+        }
+
+        async function deleteFromGallery_viaSqlite(id) {
+            if (isNativeCapacitor() && sqliteInitialized) {
+                 try {
+                     const db = await sqlitePlugin.openDatabase({ name: 'myapp.db', location: 'default' });
+                     await db.run({ statement: `DELETE FROM ${TABLE_GALERI} WHERE id = ?;`, values: [id] });
+                     return true;
+                 } catch (e) {
+                     console.error("Gagal hapus dari galeri SQLite:", e);
+                     return false;
+                 }
+            } else {
+                let arr = JSON.parse(localStorage.getItem('galeriLaporan') || '[]');
+                arr = arr.filter(x => x.id !== id);
+                localStorage.setItem('galeriLaporan', JSON.stringify(arr));
+                return true;
+            }
+        }
+    </script>
+</body>
+</html>
